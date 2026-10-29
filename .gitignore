@@ -1,0 +1,8 @@
+# Local runtime data (normally lives in %APPDATA%\LeigodAutoPause)
+config.json
+*.log
+instance.lock
+
+# OS junk
+Thumbs.db
+desktop.ini
