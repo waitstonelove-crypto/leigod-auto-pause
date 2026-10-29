@@ -3,6 +3,9 @@ config.json
 *.log
 instance.lock
 
+# Build output (run build.ps1 to regenerate)
+LeigodAutoPause.exe
+
 # OS junk
 Thumbs.db
 desktop.ini

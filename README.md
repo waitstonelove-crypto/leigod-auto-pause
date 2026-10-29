@@ -19,9 +19,19 @@
 
 需要 Windows PowerShell 5.1（Windows 10/11 自带）和一个**已设置密码**的雷神账号。
 
+如果还没有 `LeigodAutoPause.exe`，先编译（只用到系统自带的 .NET Framework 编译器，不需要 .NET SDK）：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
+```
+
+然后运行配置：
+
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1
 ```
+
+`setup.ps1` 在发现 exe 不存在时也会自动调用 `build.ps1`。
 
 按提示输入雷神手机号和密码。密码只在本地转换成 MD5 保存，不会上传。配置和日志位于：
 
@@ -44,9 +54,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\uninstall.ps1
 
 ## 文件
 
-- `LeigodAutoPause.ps1` — 监控进程、调用暂停接口、处理关机消息
+- `LeigodAutoPause.cs` — 监控程序源码（原生 C#）
+- `build.ps1` — 用系统自带的 .NET Framework 编译器生成 `LeigodAutoPause.exe`
 - `setup.ps1` — 一次性配置：保存凭据、验证登录、注册计划任务
 - `uninstall.ps1` — 移除计划任务、停止监控、删除本地配置
+
+## 资源占用
+
+编译后的 `LeigodAutoPause.exe` 常驻内存约 **35 MB**（工作集），CPU 接近 **0%**（每秒一次进程轮询）。只有暂停或关机时才会发一次 HTTP 请求。
 
 ## 原理
 
@@ -54,6 +69,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\uninstall.ps1
 - 暂停：`POST https://webapi.leigod.com/api/user/pause`（`account_token`）
 - 监控：轮询 `leigod.exe` 的 UI 进程 PID，PID 消失即触发暂停
 - 关机：隐藏 WinForms 窗口监听 `WM_QUERYENDSESSION`，同步发出暂停请求
+- 自愈：计划任务每 2 分钟检查一次，进程意外退出会自动重启（运行中则跳过）
 
 接口来自客户端抓包/社区实现，属于非官方用法；雷神更新后接口可能变化，届时日志里会出现登录或暂停失败。
 
@@ -82,6 +98,14 @@ Re-opening the client does **not** resume acceleration automatically.
 
 Requires Windows PowerShell 5.1 and a Leigod account with a password set (accounts that only use SMS login must set one first).
 
+Build the native watcher first (uses the .NET Framework compiler that ships with Windows, no SDK needed):
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
+```
+
+Then run the setup:
+
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1
 ```
@@ -100,5 +124,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\uninstall.ps1
 - Pause: `POST https://webapi.leigod.com/api/user/pause`
 - The watcher polls the UI process PID of `leigod.exe` and pauses when that process disappears.
 - A hidden WinForms window handles `WM_QUERYENDSESSION` to pause during shutdown.
+- The native watcher uses ~35 MB of memory and ~0% CPU at steady state.
 
 These are unofficial interfaces and may change after a Leigod update.

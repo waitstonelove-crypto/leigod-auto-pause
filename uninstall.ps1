@@ -15,7 +15,7 @@ if (Test-Path $LockPath) {
     $watchPid = Get-Content $LockPath | Select-Object -First 1
     if ($watchPid) {
         $p = Get-Process -Id ([int]$watchPid) -ErrorAction SilentlyContinue
-        if ($p -and $p.ProcessName -eq 'powershell') { Stop-Process -Id $p.Id -Force }
+        if ($p -and ($p.ProcessName -eq 'LeigodAutoPause' -or $p.ProcessName -eq 'powershell')) { Stop-Process -Id $p.Id -Force }
     }
     Remove-Item $LockPath -Force
     Write-Host 'Watcher process stopped.'

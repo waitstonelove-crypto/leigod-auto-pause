@@ -16,10 +16,18 @@ $ErrorActionPreference = 'Stop'
 $DataDir = Join-Path $env:APPDATA 'LeigodAutoPause'
 $CfgPath = Join-Path $DataDir 'config.json'
 $TaskName = 'LeigodAutoPause'
-$Watcher = Join-Path $PSScriptRoot 'LeigodAutoPause.ps1'
+$Watcher = Join-Path $PSScriptRoot 'LeigodAutoPause.exe'
 
 if (-not (Test-Path $DataDir)) { New-Item -ItemType Directory -Path $DataDir -Force | Out-Null }
-if (-not (Test-Path $Watcher)) { throw "Watcher script not found: $Watcher" }
+
+if (-not (Test-Path $Watcher)) {
+    $build = Join-Path $PSScriptRoot 'build.ps1'
+    if (Test-Path $build) {
+        Write-Host 'Watcher executable not found, building it...' -ForegroundColor Cyan
+        & $build
+    }
+    if (-not (Test-Path $Watcher)) { throw "Watcher executable not found: $Watcher" }
+}
 
 Write-Host ''
 Write-Host '=== Leigod Auto Pause - setup ===' -ForegroundColor Cyan
@@ -82,24 +90,33 @@ try {
 # Register (or update) the logon task.
 Write-Host ''
 Write-Host 'Registering start-at-logon task...' -ForegroundColor Cyan
-$psExe  = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-$action = New-ScheduledTaskAction -Execute $psExe `
-    -Argument ('-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}"' -f $Watcher)
-$trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+$action = New-ScheduledTaskAction -Execute $Watcher -WorkingDirectory $PSScriptRoot
+
+$logon = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+$logon.Delay = 'PT5S'
+# Self-heal: while the watcher is alive, MultipleInstances=IgnoreNew makes these
+# periodic triggers no-ops; if it dies, the next tick restarts it.
+$repeat = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddMinutes(1)) `
+    -RepetitionInterval (New-TimeSpan -Minutes 2) -RepetitionDuration (New-TimeSpan -Days 3650)
+
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
     -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew `
     -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
-Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger `
-    -Settings $settings -Description 'Pause Leigod time automatically when the client window closes.' -Force | Out-Null
+Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger @($logon, $repeat) `
+    -Settings $settings -Description 'Pause Leigod time when the client process exits or the PC shuts down.' -Force | Out-Null
 Write-Host "Task '$TaskName' registered." -ForegroundColor Green
 
 # Start now.
 Start-ScheduledTask -TaskName $TaskName
 Start-Sleep -Seconds 3
-$running = Get-Process -Name 'powershell' -ErrorAction SilentlyContinue |
-    Where-Object { $_.MainWindowHandle -eq 0 }
+$running = Get-Process -Name 'LeigodAutoPause' -ErrorAction SilentlyContinue
 Write-Host ''
 Write-Host 'Done.' -ForegroundColor Green
-Write-Host 'The watcher is running. Close the Leigod client and time will pause in ~10 seconds.'
+if ($running) {
+    Write-Host ("The watcher is running (PID {0})." -f $running.Id)
+} else {
+    Write-Host 'The watcher is not running; check the log below.' -ForegroundColor Yellow
+}
+Write-Host 'Fully quitting the Leigod client pauses the time within ~1 second.'
 Write-Host "Log: $DataDir\autopause.log"
 Write-Host "Uninstall: powershell -ExecutionPolicy Bypass -File `"$(Join-Path $PSScriptRoot 'uninstall.ps1')`""
