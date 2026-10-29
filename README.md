@@ -62,3 +62,43 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\uninstall.ps1
 - 接口返回 `400803` 表示"账号已经暂停"，视为成功。
 - `config.json` 中的 MD5 等价于登录凭据，不要提交或分享。
 - 本项目不收集、不上传任何数据。
+
+---
+
+## English
+
+**Leigod Auto Pause** — automatically pauses your Leigod accelerator time when the client process really exits or the PC shuts down.
+
+| Action | Pauses? |
+|---|---|
+| Click X to minimize to tray (process alive) | No, acceleration continues |
+| Fully quit the client from the tray | Yes, within ~1 second |
+| Shutdown / restart / logoff | Yes, immediately (`WM_QUERYENDSESSION`) |
+| Hard power-off / BSOD | Cannot be guaranteed |
+
+Re-opening the client does **not** resume acceleration automatically.
+
+### Setup
+
+Requires Windows PowerShell 5.1 and a Leigod account with a password set (accounts that only use SMS login must set one first).
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1
+```
+
+Credentials are stored locally in `%APPDATA%\LeigodAutoPause\config.json` as a phone number plus an MD5 password hash; nothing is uploaded by this tool. Setup registers a `LeigodAutoPause` scheduled task that starts the watcher at logon.
+
+### Uninstall
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\uninstall.ps1
+```
+
+### How it works
+
+- Login: `POST https://webapi.leigod.com/wap/login/bind`
+- Pause: `POST https://webapi.leigod.com/api/user/pause`
+- The watcher polls the UI process PID of `leigod.exe` and pauses when that process disappears.
+- A hidden WinForms window handles `WM_QUERYENDSESSION` to pause during shutdown.
+
+These are unofficial interfaces and may change after a Leigod update.
