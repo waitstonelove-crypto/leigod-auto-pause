@@ -240,55 +240,67 @@ namespace LeigodAutoPause
 
         public static bool Pause(Config cfg, string reason, int timeoutMs)
         {
-            try
+            int attempts = (reason == "process-exit" || reason == "manual-test") ? 3 : 1;
+
+            for (int attempt = 1; attempt <= attempts; attempt++)
             {
-                using (var http = new HttpClient())
+                try
                 {
-                    http.Timeout = TimeSpan.FromMilliseconds(timeoutMs);
-
-                    string token = GetToken(http, cfg);
-                    if (token == null) return false;
-
-                    Dictionary<string, object> resp = PostPause(http, token);
-                    if (resp == null) return false;
-
-                    int code = GetInt(resp, "code");
-                    string msg = GetStr(resp, "msg");
-
-                    if (code == 0 || code == 400803)
+                    using (var http = new HttpClient())
                     {
-                        Program.Log(string.Format("pause OK: code={0} msg={1} ({2})", code, msg, reason));
-                        return true;
-                    }
+                        http.Timeout = TimeSpan.FromMilliseconds(timeoutMs);
 
-                    if (code == 400007)
-                    {
-                        Program.Log("token expired, re-login");
-                        lock (TokenLock) { _token = null; }
-                        token = GetToken(http, cfg);
-                        if (token == null) return false;
+                        string token = GetToken(http, cfg);
+                        if (token == null)
+                        {
+                            if (attempt < attempts) { Thread.Sleep(1500 * attempt); continue; }
+                            return false;
+                        }
 
-                        resp = PostPause(http, token);
-                        if (resp == null) return false;
+                        Dictionary<string, object> resp = PostPause(http, token);
+                        if (resp == null)
+                        {
+                            if (attempt < attempts) { Thread.Sleep(1500 * attempt); continue; }
+                            return false;
+                        }
 
-                        code = GetInt(resp, "code");
-                        msg = GetStr(resp, "msg");
+                        int code = GetInt(resp, "code");
+                        string msg = GetStr(resp, "msg");
+
+                        if (code == 400007)
+                        {
+                            Program.Log("token expired, re-login");
+                            lock (TokenLock) { _token = null; }
+                            token = GetToken(http, cfg);
+                            if (token != null)
+                            {
+                                resp = PostPause(http, token);
+                                if (resp != null)
+                                {
+                                    code = GetInt(resp, "code");
+                                    msg = GetStr(resp, "msg");
+                                }
+                            }
+                        }
+
                         if (code == 0 || code == 400803)
                         {
                             Program.Log(string.Format("pause OK: code={0} msg={1} ({2})", code, msg, reason));
                             return true;
                         }
-                    }
 
-                    Program.Log(string.Format("pause failed: code={0} msg={1}", code, msg));
-                    return false;
+                        Program.Log(string.Format("pause failed (attempt {0}/{1}): code={2} msg={3}", attempt, attempts, code, msg));
+                    }
                 }
+                catch (Exception ex)
+                {
+                    Program.Log(string.Format("{0} -> pause error (attempt {1}/{2}): {3}", reason, attempt, attempts, ex.Message));
+                }
+
+                if (attempt < attempts) Thread.Sleep(1500 * attempt);
             }
-            catch (Exception ex)
-            {
-                Program.Log(reason + " -> pause error: " + ex.Message);
-                return false;
-            }
+
+            return false;
         }
 
         private static string GetToken(HttpClient http, Config cfg)
@@ -320,7 +332,7 @@ namespace LeigodAutoPause
             {
                 var resp = http.PostAsync("https://webapi.leigod.com/wap/login/bind", content).Result;
                 string text = resp.Content.ReadAsStringAsync().Result;
-                var dict = ser.Deserialize<Dictionary<string, object>>(text);
+                var dict = ParseJson(text, "login", resp);
 
                 if (GetInt(dict, "code") == 0)
                 {
@@ -356,7 +368,27 @@ namespace LeigodAutoPause
             {
                 var resp = http.PostAsync("https://webapi.leigod.com/api/user/pause", content).Result;
                 string text = resp.Content.ReadAsStringAsync().Result;
-                return ser.Deserialize<Dictionary<string, object>>(text);
+                return ParseJson(text, "pause", resp);
+            }
+        }
+
+        private static Dictionary<string, object> ParseJson(string text, string what, HttpResponseMessage resp)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                Program.Log(string.Format("{0}: empty response (HTTP {1})", what, (int)resp.StatusCode));
+                return null;
+            }
+
+            try
+            {
+                return new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(text);
+            }
+            catch (Exception ex)
+            {
+                string preview = text.Length > 300 ? text.Substring(0, 300) : text;
+                Program.Log(string.Format("{0}: non-JSON response (HTTP {1}): {2} | {3}", what, (int)resp.StatusCode, ex.Message, preview));
+                return null;
             }
         }
 

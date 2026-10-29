@@ -97,7 +97,7 @@ $logon.Delay = 'PT5S'
 # Self-heal: while the watcher is alive, MultipleInstances=IgnoreNew makes these
 # periodic triggers no-ops; if it dies, the next tick restarts it.
 $repeat = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddMinutes(1)) `
-    -RepetitionInterval (New-TimeSpan -Minutes 2) -RepetitionDuration (New-TimeSpan -Days 3650)
+    -RepetitionInterval (New-TimeSpan -Minutes 1) -RepetitionDuration (New-TimeSpan -Days 3650)
 
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
     -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew `

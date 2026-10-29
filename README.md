@@ -69,7 +69,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\uninstall.ps1
 - 暂停：`POST https://webapi.leigod.com/api/user/pause`（`account_token`）
 - 监控：轮询 `leigod.exe` 的 UI 进程 PID，PID 消失即触发暂停
 - 关机：隐藏 WinForms 窗口监听 `WM_QUERYENDSESSION`，同步发出暂停请求
-- 自愈：计划任务每 2 分钟检查一次，进程意外退出会自动重启（运行中则跳过）
+- 自愈：计划任务每 1 分钟检查一次，进程意外退出会自动重启（运行中则跳过）
+- 暂停请求失败时会自动重试（最多 3 次），并记录原始响应便于排查
 
 接口来自客户端抓包/社区实现，属于非官方用法；雷神更新后接口可能变化，届时日志里会出现登录或暂停失败。
 
